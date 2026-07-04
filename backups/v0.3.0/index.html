@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KrakenScape - Ambient Soundscape Designer</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <i class="fas fa-water"></i>
+                <span>KrakenScape</span>
+            </div>
+            <div class="header-controls">
+                <button id="masterPlay" class="master-btn" title="Play All">
+                    <i class="fas fa-play"></i>
+                </button>
+                <button id="masterStop" class="master-btn" title="Stop All">
+                    <i class="fas fa-stop"></i>
+                </button>
+                <div class="master-volume">
+                    <i class="fas fa-volume-up"></i>
+                    <input type="range" id="masterVolume" min="0" max="100" value="80">
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Left Sidebar - Soundscapes/Profiles -->
+            <aside class="sidebar sidebar-left">
+                <div class="panel-header">
+                    <h2>Soundscapes</h2>
+                    <button id="newSoundscape" class="btn-icon" title="New Soundscape">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchSoundscapes" placeholder="Search...">
+                </div>
+                <ul id="soundscapeList" class="item-list">
+                    <!-- Populated by JavaScript -->
+                </ul>
+            </aside>
+
+            <!-- Second Column - Moods/Presets -->
+            <aside class="sidebar sidebar-moods">
+                <div class="panel-header">
+                    <h2>Moods</h2>
+                    <button id="newMood" class="btn-icon" title="New Mood">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <ul id="moodList" class="item-list">
+                    <!-- Populated by JavaScript -->
+                </ul>
+            </aside>
+
+            <!-- Center - Sound Layers -->
+            <section class="sound-layers-panel">
+                <div class="panel-header">
+                    <h2>Sound Layers</h2>
+                    <button id="addLayer" class="btn-icon" title="Add Sound Layer">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div id="soundLayers" class="sound-layers">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </section>
+
+            <!-- Right Sidebar - One-Shots -->
+            <aside class="sidebar sidebar-right">
+                <div class="panel-header">
+                    <h2>One-Shots</h2>
+                    <button id="addOneShot" class="btn-icon" title="Add One-Shot">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div id="oneShotGrid" class="oneshot-grid">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer / Status Bar -->
+        <footer class="app-footer">
+            <div class="status-left">
+                <span id="activeSoundscape">No soundscape loaded</span>
+            </div>
+            <div class="status-center">
+                <span id="activeMood">-</span>
+            </div>
+            <div class="status-right">
+                <span id="layerCount">0 layers active</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal for editing sound layer -->
+    <div id="layerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Configure Sound Layer</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="layerName">Name</label>
+                    <input type="text" id="layerName" placeholder="e.g., Engine Hum">
+                </div>
+
+                <div class="form-group">
+                    <label>Sound Type</label>
+                    <div class="radio-group-vertical">
+                        <label class="radio-label">
+                            <input type="radio" name="soundType" value="loop" checked>
+                            <span>Loop (Continuous)</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="soundType" value="intermittent">
+                            <span>Intermittent (Random)</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="soundType" value="playlist">
+                            <span>Playlist (Music folder)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" id="singleFileGroup">
+                    <label for="layerFile">Sound File</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="layerFile" accept="audio/*">
+                        <button class="btn-secondary" id="browseFile">
+                            <i class="fas fa-file-audio"></i> Select File
+                        </button>
+                        <span id="fileName">No file selected</span>
+                    </div>
+                </div>
+
+                <div class="form-group" id="playlistFilesGroup" style="display: none;">
+                    <label for="playlistFiles">Music Files (select multiple or folder)</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="playlistFiles" accept="audio/*" multiple webkitdirectory>
+                        <button class="btn-secondary" id="browsePlaylistFiles">
+                            <i class="fas fa-folder-open"></i> Select Folder
+                        </button>
+                        <button class="btn-secondary" id="browseMultipleFiles">
+                            <i class="fas fa-music"></i> Select Files
+                        </button>
+                    </div>
+                    <div id="playlistFileList" class="playlist-file-list">
+                        <span class="placeholder">No files selected</span>
+                    </div>
+                </div>
+
+                <div id="loopOptions" class="type-options">
+                    <div class="form-group">
+                        <label for="crossfadeDuration">Crossfade Duration (seconds)</label>
+                        <input type="number" id="crossfadeDuration" value="2" min="0" max="10" step="0.5">
+                    </div>
+                </div>
+
+                <div id="intermittentOptions" class="type-options" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="minDelay">Min Delay (sec)</label>
+                            <input type="number" id="minDelay" value="10" min="1" max="300">
+                        </div>
+                        <div class="form-group">
+                            <label for="maxDelay">Max Delay (sec)</label>
+                            <input type="number" id="maxDelay" value="60" min="1" max="600">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="minVolume">Volume Min (%)</label>
+                            <input type="number" id="minVolume" value="80" min="0" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label for="maxVolume">Volume Max (%)</label>
+                            <input type="number" id="maxVolume" value="100" min="0" max="100">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="fadeIn">Fade In (sec)</label>
+                            <input type="number" id="fadeIn" value="0.5" min="0" max="10" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="fadeOut">Fade Out (sec)</label>
+                            <input type="number" id="fadeOut" value="1" min="0" max="10" step="0.1">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="playlistOptions" class="type-options" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="playlistCrossfade">Crossfade Duration (sec)</label>
+                            <input type="number" id="playlistCrossfade" value="3" min="0" max="15" step="0.5">
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="playlistShuffle" checked>
+                                <span>Shuffle tracks</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="layerVolume">Default Volume</label>
+                    <input type="range" id="layerVolume" min="0" max="100" value="70">
+                    <span id="layerVolumeValue">70%</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelLayer">Cancel</button>
+                <button class="btn-primary" id="saveLayer">Save Layer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for new soundscape -->
+    <div id="soundscapeModal" class="modal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>New Soundscape</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="soundscapeName">Soundscape Name</label>
+                    <input type="text" id="soundscapeName" placeholder="e.g., Spaceship Bridge">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary modal-cancel">Cancel</button>
+                <button class="btn-primary" id="createSoundscape">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for new mood -->
+    <div id="moodModal" class="modal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>New Mood</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="moodName">Mood Name</label>
+                    <input type="text" id="moodName" placeholder="e.g., Red Alert">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary modal-cancel">Cancel</button>
+                <button class="btn-primary" id="createMood">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/audio-engine.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
