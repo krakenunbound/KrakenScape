@@ -237,6 +237,26 @@ class LayerController {
         this.currentSource = null;
         this.nextSource = null;
         this.gainNode = null;
+        this.loopGainNode = null;
+        this.loopVoices = new Set();
+        this.loopScheduler = null;
+        this.loopNextStartTime = 0;
+        this.loopInitialOffset = 0;
+        this.loopStartedAt = 0;
+        this.loopCrossfade = 0;
+        this.loopFirstCycleDuration = 0;
+        this.loopCycleDuration = 0;
+        this.loopFadeInCurve = new Float32Array(64);
+        this.loopFadeOutCurve = new Float32Array(64);
+        for (let i = 0; i < this.loopFadeInCurve.length; i++) {
+            const position = i / (this.loopFadeInCurve.length - 1);
+            this.loopFadeInCurve[i] = Math.sin(position * Math.PI / 2);
+            this.loopFadeOutCurve[i] = Math.cos(position * Math.PI / 2);
+        }
+        this.loopFadeInCurve[0] = 0;
+        this.loopFadeInCurve[this.loopFadeInCurve.length - 1] = 1;
+        this.loopFadeOutCurve[0] = 1;
+        this.loopFadeOutCurve[this.loopFadeOutCurve.length - 1] = 0;
         this.intermittentTimeout = null;
         this.progress = 0;
         this.progressInterval = null;
@@ -278,6 +298,9 @@ class LayerController {
      */
     setVolume(value) {
         this.volume = Math.max(0, Math.min(1, value));
+        if (this.loopGainNode && this.isPlaying) {
+            this.loopGainNode.gain.setTargetAtTime(this.volume, this.engine.audioContext.currentTime, 0.1);
+        }
         if (this.gainNode && this.isPlaying) {
             this.gainNode.gain.setTargetAtTime(this.volume, this.engine.audioContext.currentTime, 0.1);
         }
@@ -322,6 +345,23 @@ class LayerController {
             this.nextSource = null;
         }
 
+        if (this.loopScheduler) {
+            clearInterval(this.loopScheduler);
+            this.loopScheduler = null;
+        }
+
+        this.loopVoices.forEach(voice => {
+            try {
+                voice.source.stop();
+            } catch (e) {}
+            try {
+                voice.source.disconnect();
+                voice.gain.disconnect();
+            } catch (e) {}
+        });
+        this.loopVoices.clear();
+        this.loopGainNode = null;
+
         if (this.intermittentTimeout) {
             clearTimeout(this.intermittentTimeout);
             this.intermittentTimeout = null;
@@ -359,26 +399,94 @@ class LayerController {
      */
     _playLoop() {
         const ctx = this.engine.audioContext;
-
-        // Create gain node for this layer
-        this.gainNode = ctx.createGain();
-        this.gainNode.gain.value = this.volume;
-        this.gainNode.connect(this.engine.masterGain);
-
-        // Create and start the source
-        this.currentSource = ctx.createBufferSource();
-        this.currentSource.buffer = this.buffer;
-        this.currentSource.loop = true;
-        this.currentSource.connect(this.gainNode);
-        if (this.config.randomStart && this.buffer?.duration) {
-            const offset = Math.random() * this.buffer.duration;
-            this.currentSource.start(0, offset);
-        } else {
-            this.currentSource.start(0);
+        const duration = this.buffer?.duration || 0;
+        if (duration <= 0) {
+            this.stop();
+            return;
         }
 
-        // Track progress
+        // A stable layer-level gain keeps the volume slider effective while
+        // individual loop voices crossfade underneath it.
+        this.loopGainNode = ctx.createGain();
+        this.loopGainNode.gain.value = this.volume;
+        this.loopGainNode.connect(this.engine.masterGain);
+
+        const requestedCrossfade = Math.max(0, Number(this.config.crossfadeDuration) || 0);
+        const crossfade = Math.min(requestedCrossfade, duration / 2);
+        // Leave enough material on the first pass for a complete fade-in and
+        // fade-out. Very short clips therefore start at zero rather than
+        // creating a partial first seam.
+        const maxOffset = Math.max(0, duration - (crossfade * 2));
+        const offset = this.config.randomStart ? Math.random() * maxOffset : 0;
+
+        this.loopInitialOffset = offset;
+        this.loopStartedAt = ctx.currentTime;
+        this.loopCrossfade = crossfade;
+        this.loopFirstCycleDuration = duration - offset - crossfade;
+        this.loopCycleDuration = duration - crossfade;
+
+        if (crossfade === 0) {
+            this.currentSource = ctx.createBufferSource();
+            this.currentSource.buffer = this.buffer;
+            this.currentSource.loop = true;
+            this.currentSource.connect(this.loopGainNode);
+            this.currentSource.start(0, offset);
+            this._trackLoopProgress();
+            return;
+        }
+
+        const firstDuration = duration - offset;
+        this._scheduleLoopVoice(ctx.currentTime, offset, firstDuration, crossfade);
+        this.loopNextStartTime = ctx.currentTime + firstDuration - crossfade;
+
+        const scheduleAhead = () => {
+            const horizon = ctx.currentTime + 10;
+            while (this.isPlaying && this.loopNextStartTime <= horizon) {
+                this._scheduleLoopVoice(this.loopNextStartTime, 0, duration, crossfade);
+                this.loopNextStartTime += duration - crossfade;
+            }
+        };
+
+        scheduleAhead();
+        this.loopScheduler = setInterval(scheduleAhead, 1000);
+
         this._trackLoopProgress();
+    }
+
+    /**
+     * Schedule one non-looping buffer voice with equal-power gain overlap.
+     * The layer gain controls overall volume; voice gain only shapes the seam.
+     */
+    _scheduleLoopVoice(startTime, offset, playDuration, crossfade) {
+        const ctx = this.engine.audioContext;
+        const source = ctx.createBufferSource();
+        const voiceGain = ctx.createGain();
+        const endTime = startTime + playDuration;
+        const fadeInEnd = Math.min(endTime, startTime + crossfade);
+        const fadeOutStart = Math.max(fadeInEnd, endTime - crossfade);
+
+        source.buffer = this.buffer;
+        source.loop = false;
+        voiceGain.gain.setValueAtTime(0, startTime);
+        voiceGain.gain.setValueCurveAtTime(this.loopFadeInCurve, startTime, fadeInEnd - startTime);
+        voiceGain.gain.setValueAtTime(1, fadeOutStart);
+        voiceGain.gain.setValueCurveAtTime(this.loopFadeOutCurve, fadeOutStart, endTime - fadeOutStart);
+
+        source.connect(voiceGain);
+        voiceGain.connect(this.loopGainNode);
+
+        const voice = { source, gain: voiceGain };
+        this.loopVoices.add(voice);
+        source.onended = () => {
+            this.loopVoices.delete(voice);
+            try {
+                source.disconnect();
+                voiceGain.disconnect();
+            } catch (e) {}
+        };
+
+        source.start(startTime, offset);
+        source.stop(endTime);
     }
 
     /**
@@ -386,13 +494,21 @@ class LayerController {
      */
     _trackLoopProgress() {
         const duration = this.buffer.duration;
-        const startTime = this.engine.audioContext.currentTime;
+        const startTime = this.loopStartedAt;
+        const initialOffset = this.loopInitialOffset;
+        const crossfade = this.loopCrossfade;
+        const firstCycleDuration = this.loopFirstCycleDuration;
+        const cycleDuration = this.loopCycleDuration;
 
         this.progressInterval = setInterval(() => {
             if (!this.isPlaying) return;
 
             const elapsed = this.engine.audioContext.currentTime - startTime;
-            this.progress = (elapsed % duration) / duration;
+            if (crossfade > 0 && elapsed >= firstCycleDuration) {
+                this.progress = ((elapsed - firstCycleDuration) % cycleDuration) / duration;
+            } else {
+                this.progress = ((initialOffset + elapsed) % duration) / duration;
+            }
 
             if (this.onProgressUpdate) {
                 this.onProgressUpdate(this.progress);

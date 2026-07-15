@@ -31,7 +31,7 @@ KrakenScape's interface and existing soundscapes work fully offline. All interfa
 4. **Configure the Layer**:
     - **Name**: Give it a descriptive name.
     - **Sound Type**:
-        - **Loop**: Plays continuously with crossfading looping.
+        - **Loop**: Plays continuously with a real overlapping crossfade between the end and beginning. A value of 0 uses native seamless looping; longer fades are automatically limited to half the clip length.
         - **Intermittent**: Plays randomly. Set Min/Max Delay (seconds between sounds) and Min/Max Volume (randomized volume).
         - **Playlist**: Select a music folder or multiple files and set shuffle/repeat.
     - **File**: Select an audio file (MP3, WAV, OGG, etc.).

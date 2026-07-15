@@ -16,6 +16,7 @@ A soundscape designer application inspired by Syrinscape, for creating ambient s
 - Prevented playlist edits from deleting stored tracks when no replacement files are selected.
 - Corrected single-track playlists with repeat disabled.
 - Cleared stale playlist crossfade scheduling when Skip is used.
+- Implemented real overlapping loop crossfades using scheduled Web Audio voices.
 - Escaped imported and user-entered names before rendering them as HTML.
 - Added dependency-free syntax, offline-asset, and audio regression checks through `npm test`.
 

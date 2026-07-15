@@ -26,6 +26,25 @@ function makeEngineStub() {
     };
 }
 
+function makeAudioParam(initialValue = 0) {
+    return {
+        value: initialValue,
+        events: [],
+        setValueAtTime(value, time) {
+            this.events.push(['set', value, time]);
+        },
+        linearRampToValueAtTime(value, time) {
+            this.events.push(['ramp', value, time]);
+        },
+        setValueCurveAtTime(curve, time, duration) {
+            this.events.push(['curve', curve[0], curve[curve.length - 1], time, duration]);
+        },
+        setTargetAtTime(value, time, constant) {
+            this.events.push(['target', value, time, constant]);
+        }
+    };
+}
+
 function testZeroVolumeIsPreserved() {
     const engine = makeEngineStub();
     const layer = new LayerController(engine, {
@@ -69,6 +88,65 @@ function testSingleTrackNoRepeatStops() {
     assert.equal(playlist._getNextTrackIndex(), 0);
     playlist.playedIndices.push(0);
     assert.equal(playlist._getNextTrackIndex(), -1);
+}
+
+function testLoopCrossfadeSchedulesAnOverlap() {
+    const sources = [];
+    const gains = [];
+    const context = {
+        currentTime: 0,
+        createGain() {
+            const gain = {
+                gain: makeAudioParam(),
+                connect() {},
+                disconnect() {}
+            };
+            gains.push(gain);
+            return gain;
+        },
+        createBufferSource() {
+            const source = {
+                loop: false,
+                starts: [],
+                stops: [],
+                connect() {},
+                disconnect() {},
+                start(time, offset = 0) {
+                    this.starts.push([time, offset]);
+                },
+                stop(time) {
+                    this.stops.push(time);
+                },
+                onended: null
+            };
+            sources.push(source);
+            return source;
+        }
+    };
+    const layer = new LayerController({ audioContext: context, masterGain: {} }, {
+        id: 'crossfade-loop',
+        type: 'loop',
+        volume: 0.25,
+        crossfadeDuration: 2
+    });
+    layer.setBuffer({ duration: 10 });
+
+    layer.play();
+
+    assert.equal(sources.length, 2);
+    assert.deepEqual(sources[0].starts[0], [0, 0]);
+    assert.deepEqual(sources[1].starts[0], [8, 0]);
+    assert.equal(sources[0].stops[0], 10);
+    assert.equal(sources[1].stops[0], 18);
+    assert.equal(gains[0].gain.value, 0.25);
+    assert.deepEqual(gains[1].gain.events, [
+        ['set', 0, 0],
+        ['curve', 0, 1, 0, 2],
+        ['set', 1, 8],
+        ['curve', 1, 0, 8, 2]
+    ]);
+
+    layer.stop();
 }
 
 function testMasterStopStopsOneShots() {
@@ -162,6 +240,7 @@ async function testPlaylistEditPreservesStoredTracks() {
 async function main() {
     testZeroVolumeIsPreserved();
     testSingleTrackNoRepeatStops();
+    testLoopCrossfadeSchedulesAnOverlap();
     testMasterStopStopsOneShots();
     testUserTextIsEscaped();
     await testPlaylistEditPreservesStoredTracks();
