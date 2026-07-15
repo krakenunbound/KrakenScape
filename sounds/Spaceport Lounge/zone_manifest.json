@@ -1,0 +1,162 @@
+{
+  "type": "wow_zone_audio_bundle",
+  "version": "0.3.0",
+  "generated_at": "2026-07-15T21:15:00Z",
+  "format": "mp3",
+  "zone": {
+    "id": "elevenlabs_spaceport_lounge",
+    "name": "Spaceport Lounge",
+    "display_name": "Spaceport Lounge — ElevenLabs Test Scene",
+    "zone_name": "SpaceportLounge",
+    "family_name": "Spaceport Lounge",
+    "parent_area_id": 0,
+    "parent_area_name": ""
+  },
+  "summary": {
+    "clip_count": 6,
+    "group_count": 6
+  },
+  "groups": [
+    {
+      "id": "spaceport_life_support_hum",
+      "name": "Life Support & Generator Hum",
+      "category": "ambient",
+      "suggested_layer_type": "loop",
+      "source_label": "ElevenLabs Sound Effects v2",
+      "import_defaults": {
+        "type": "loop",
+        "volume": 0.42,
+        "crossfade_duration": 2.0
+      },
+      "files": [
+        {
+          "title": "Station Life Support Hum",
+          "description": "Subtle ventilation, generator resonance, and climate-control airflow.",
+          "file_name": "01_station_life_support_hum.mp3",
+          "relative_path": "audio/01_station_life_support_hum.mp3"
+        }
+      ]
+    },
+    {
+      "id": "spaceport_crowd_murmur",
+      "name": "Waiting Travelers",
+      "category": "ambient",
+      "suggested_layer_type": "loop",
+      "source_label": "ElevenLabs Sound Effects v2",
+      "import_defaults": {
+        "type": "loop",
+        "volume": 0.38,
+        "crossfade_duration": 2.0
+      },
+      "files": [
+        {
+          "title": "Traveler Crowd Murmur",
+          "description": "Sparse, indistinct conversation with small luggage and clothing movements.",
+          "file_name": "02_traveler_crowd_murmur.mp3",
+          "relative_path": "audio/02_traveler_crowd_murmur.mp3"
+        }
+      ]
+    },
+    {
+      "id": "spaceport_terminal_electronics",
+      "name": "Terminal Electronics",
+      "category": "ambient",
+      "suggested_layer_type": "loop",
+      "source_label": "ElevenLabs Sound Effects v2",
+      "import_defaults": {
+        "type": "loop",
+        "volume": 0.16,
+        "crossfade_duration": 1.5
+      },
+      "files": [
+        {
+          "title": "Terminal Electronics",
+          "description": "Sparse data chirps, touchscreen confirmations, scanners, and relays.",
+          "file_name": "03_terminal_electronics.mp3",
+          "relative_path": "audio/03_terminal_electronics.mp3"
+        }
+      ]
+    },
+    {
+      "id": "spaceport_pa_announcement",
+      "name": "Distant PA Announcement",
+      "category": "event",
+      "suggested_layer_type": "intermittent",
+      "source_label": "ElevenLabs Sound Effects v2",
+      "import_defaults": {
+        "type": "intermittent",
+        "volume": 0.22,
+        "randomize_delay": true,
+        "randomize_volume": true,
+        "min_delay": 45,
+        "max_delay": 100,
+        "min_volume": 0.72,
+        "max_volume": 0.95,
+        "fade_in": 0.12,
+        "fade_out": 0.7
+      },
+      "files": [
+        {
+          "title": "Distant PA Announcement",
+          "description": "Routine station announcement with intentionally indistinct wording.",
+          "file_name": "04_distant_pa_announcement.mp3",
+          "relative_path": "audio/04_distant_pa_announcement.mp3"
+        }
+      ]
+    },
+    {
+      "id": "spaceport_docking_rumble",
+      "name": "Distant Ship Docking",
+      "category": "event",
+      "suggested_layer_type": "intermittent",
+      "source_label": "ElevenLabs Sound Effects v2",
+      "import_defaults": {
+        "type": "intermittent",
+        "volume": 0.18,
+        "randomize_delay": true,
+        "randomize_volume": true,
+        "min_delay": 35,
+        "max_delay": 85,
+        "min_volume": 0.7,
+        "max_volume": 0.92,
+        "fade_in": 0.15,
+        "fade_out": 0.8
+      },
+      "files": [
+        {
+          "title": "Passenger Ship Docking Rumble",
+          "description": "Distant coupling impact and structural vibration heard through the station.",
+          "file_name": "05_passenger_ship_docking_rumble.mp3",
+          "relative_path": "audio/05_passenger_ship_docking_rumble.mp3"
+        }
+      ]
+    },
+    {
+      "id": "spaceport_boarding_chime",
+      "name": "Boarding Gate Chime",
+      "category": "event",
+      "suggested_layer_type": "intermittent",
+      "source_label": "ElevenLabs Sound Effects v2",
+      "import_defaults": {
+        "type": "intermittent",
+        "volume": 0.24,
+        "randomize_delay": true,
+        "randomize_volume": true,
+        "min_delay": 60,
+        "max_delay": 140,
+        "min_volume": 0.8,
+        "max_volume": 1.0,
+        "fade_in": 0.03,
+        "fade_out": 0.35
+      },
+      "files": [
+        {
+          "title": "Boarding Gate Chime",
+          "description": "A restrained three-tone notification used around the departure gates.",
+          "file_name": "06_boarding_gate_chime.mp3",
+          "relative_path": "audio/06_boarding_gate_chime.mp3"
+        }
+      ]
+    }
+  ]
+}
