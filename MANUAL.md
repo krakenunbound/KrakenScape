@@ -3,6 +3,8 @@
 ## Overview
 KrakenScape is a local-first ambient soundscape designer inspired by tools like Syrinscape. It allows you to mix looping background audio with intermittent (randomized) sound effects to create immersive environments for tabletop RPGs, writing, or relaxation.
 
+KrakenScape's interface and existing soundscapes work fully offline. All interface icons are bundled with the project, and audio is stored locally in the browser's IndexedDB database.
+
 ## Features
 - **Soundscapes**: Collections of audio layers and presets.
 - **Moods**: Saved snapshots of volume levels and active layers.

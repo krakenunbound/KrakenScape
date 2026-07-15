@@ -1,0 +1,8 @@
+# Local secrets must never be committed.
+/secrets/
+
+# Local development noise.
+*.log
+node_modules/
+.DS_Store
+Thumbs.db

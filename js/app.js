@@ -753,11 +753,10 @@ class KrakenScapeApp {
         this.layerConfigs.set(config.id, config);
 
         if (config.type === 'playlist') {
-            config.layerTrackNames = [];
-            config.layerTrackCount = 0;
-            await this.audioStorage.deleteAudio(config.id);
-            await this.audioStorage.deleteLayerTracks(config.id);
-            if (config.playlistFiles && config.playlistFiles.length > 0) {
+            const replacingPlaylistTracks = config.playlistFiles && config.playlistFiles.length > 0;
+
+            if (replacingPlaylistTracks) {
+                await this.audioStorage.deleteAudio(config.id);
                 await this.audioStorage.deletePlaylistTracks(config.id);
                 await this.audioStorage.storePlaylistTracks(
                     config.id,
@@ -769,7 +768,7 @@ class KrakenScapeApp {
             }
 
             const layer = this._createAudioLayer(config);
-            if (config.playlistFiles && config.playlistFiles.length > 0) {
+            if (replacingPlaylistTracks) {
                 layer.clearTracks();
                 await layer.addTracks(config.playlistFiles);
             } else {
@@ -1243,7 +1242,7 @@ class KrakenScapeApp {
         if (buffer) {
             this.ui.updateOneShotPlayState(id, true);
 
-            const source = this.audioEngine.playOneShot(buffer, config?.volume || 1);
+            const source = this.audioEngine.playOneShot(buffer, config?.volume ?? 1);
 
             source.onended = () => {
                 this.ui.updateOneShotPlayState(id, false);
@@ -1415,6 +1414,8 @@ class KrakenScapeApp {
         this.ui.updateStatus(this.currentSoundscape?.name, this.currentMood?.name);
     }
 }
+
+window.KrakenScapeApp = KrakenScapeApp;
 
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

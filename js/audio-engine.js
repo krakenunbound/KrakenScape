@@ -11,6 +11,7 @@ class AudioEngine {
         this.masterAnalyser = null;
         this.layers = new Map(); // layerId -> LayerController
         this.oneShots = new Map(); // oneShotId -> buffer
+        this.activeOneShotSources = new Set();
         this.isPlaying = false;
         this.masterVolume = 0.8;
     }
@@ -156,6 +157,12 @@ class AudioEngine {
     stopAll() {
         this.isPlaying = false;
         this.layers.forEach(layer => layer.stop());
+        this.activeOneShotSources.forEach(source => {
+            try {
+                source.stop();
+            } catch (e) {}
+        });
+        this.activeOneShotSources.clear();
     }
 
     /**
@@ -170,6 +177,11 @@ class AudioEngine {
 
         source.connect(gainNode);
         gainNode.connect(this.masterGain);
+
+        this.activeOneShotSources.add(source);
+        source.addEventListener('ended', () => {
+            this.activeOneShotSources.delete(source);
+        }, { once: true });
 
         source.start(0);
 
@@ -208,19 +220,19 @@ class LayerController {
             randomizeDelay: config.randomizeDelay !== false,
             randomizeVolume: config.randomizeVolume !== false,
             // Loop settings
-            crossfadeDuration: config.crossfadeDuration || 2,
+            crossfadeDuration: config.crossfadeDuration ?? 2,
             // Intermittent settings
-            minDelay: config.minDelay || 10,
-            maxDelay: config.maxDelay || 60,
-            minVolume: config.minVolume || 0.8,
-            maxVolume: config.maxVolume || 1,
-            fadeIn: config.fadeIn || 0.5,
-            fadeOut: config.fadeOut || 1
+            minDelay: config.minDelay ?? 10,
+            maxDelay: config.maxDelay ?? 60,
+            minVolume: config.minVolume ?? 0.8,
+            maxVolume: config.maxVolume ?? 1,
+            fadeIn: config.fadeIn ?? 0.5,
+            fadeOut: config.fadeOut ?? 1
         };
 
         this.buffer = null;
         this.buffers = [];
-        this.volume = config.volume || 0.7;
+        this.volume = Math.max(0, Math.min(1, config.volume ?? 0.7));
         this.isPlaying = false;
         this.currentSource = null;
         this.nextSource = null;
@@ -531,7 +543,7 @@ class OneShotController {
             icon: config.icon || 'fa-volume-up'
         };
         this.buffer = null;
-        this.volume = config.volume || 1;
+        this.volume = Math.max(0, Math.min(1, config.volume ?? 1));
         this.currentSource = null;
         this.isPlaying = false;
         this.onPlayStateChange = null;
@@ -615,11 +627,11 @@ class PlaylistController {
             enabled: config.enabled !== false,
             shuffle: config.shuffle !== false, // Default to shuffle on
             repeat: config.repeat !== false,
-            crossfadeDuration: config.crossfadeDuration || 3
+            crossfadeDuration: Math.max(0, config.crossfadeDuration ?? 3)
         };
 
         this.tracks = []; // Array of { name, buffer, file }
-        this.volume = config.volume || 0.7;
+        this.volume = Math.max(0, Math.min(1, config.volume ?? 0.7));
         this.isPlaying = false;
         this.currentTrackIndex = -1;
         this.currentSource = null;
@@ -776,17 +788,31 @@ class PlaylistController {
     skip() {
         if (!this.isPlaying || this.tracks.length === 0) return;
 
+        if (this.crossfadeTimeout) {
+            clearTimeout(this.crossfadeTimeout);
+            this.crossfadeTimeout = null;
+        }
+
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
+        }
+
         // Stop current track immediately with a quick fade
         const ctx = this.engine.audioContext;
+        const sourceToStop = this.currentSource;
         if (this.gainNode) {
             this.gainNode.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
         }
 
         setTimeout(() => {
-            if (this.currentSource) {
-                try { this.currentSource.stop(); } catch (e) {}
+            if (sourceToStop) {
+                sourceToStop.onended = null;
+                try { sourceToStop.stop(); } catch (e) {}
             }
-            this._playNextTrack();
+            if (this.isPlaying) {
+                this._playNextTrack();
+            }
         }, 500);
     }
 
@@ -795,7 +821,12 @@ class PlaylistController {
      */
     _getNextTrackIndex() {
         if (this.tracks.length === 0) return -1;
-        if (this.tracks.length === 1) return 0;
+        if (this.tracks.length === 1) {
+            if (!this.config.repeat && this.playedIndices.includes(0)) {
+                return -1;
+            }
+            return 0;
+        }
 
         if (this.config.shuffle) {
             // Reset played indices if we've played all tracks

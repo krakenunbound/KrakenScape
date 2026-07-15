@@ -22,6 +22,20 @@ class UIController {
         ];
     }
 
+    _escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    _safeIcon(icon, fallback = 'fa-volume-up') {
+        const value = String(icon || '');
+        return /^fa-[a-z0-9-]+$/.test(value) ? value : fallback;
+    }
+
     /**
      * Initialize UI elements and event listeners
      */
@@ -431,7 +445,7 @@ class UIController {
         const items = names.map(name => `
             <div class="file-item">
                 <i class="fas fa-music"></i>
-                <span>${name}</span>
+                <span>${this._escapeHtml(name)}</span>
             </div>
         `).join('');
 
@@ -581,12 +595,12 @@ class UIController {
                     <input
                         type="radio"
                         name="wowImportSelection"
-                        value="${candidate.id}"
+                        value="${this._escapeHtml(candidate.id)}"
                         ${index === 0 ? 'checked' : ''}
                     >
                     <div class="wow-import-card-body">
-                        <div class="wow-import-card-title">${candidate.zoneName}</div>
-                        <div class="wow-import-card-subtitle">${candidate.familyName || 'Standalone Zone'}</div>
+                        <div class="wow-import-card-title">${this._escapeHtml(candidate.zoneName)}</div>
+                        <div class="wow-import-card-subtitle">${this._escapeHtml(candidate.familyName || 'Standalone Zone')}</div>
                         <div class="wow-import-card-meta">
                             <span>${candidate.groupCount} group${candidate.groupCount !== 1 ? 's' : ''}</span>
                             <span>${candidate.clipCount} clip${candidate.clipCount !== 1 ? 's' : ''}</span>
@@ -751,7 +765,7 @@ class UIController {
             li.dataset.id = soundscape.id;
             li.innerHTML = `
                 <span class="item-icon"><i class="fas fa-music"></i></span>
-                <span>${soundscape.name}</span>
+                <span>${this._escapeHtml(soundscape.name)}</span>
             `;
             li.addEventListener('click', () => {
                 if (this.onSoundscapeSelect) {
@@ -795,7 +809,7 @@ class UIController {
             li.dataset.id = mood.id;
             li.innerHTML = `
                 <span class="item-icon"><i class="fas fa-theater-masks"></i></span>
-                <span>${mood.name}</span>
+                <span>${this._escapeHtml(mood.name)}</span>
             `;
             li.addEventListener('click', () => {
                 if (this.onMoodSelect) {
@@ -823,6 +837,7 @@ class UIController {
      */
     renderSoundLayers(layers) {
         this.elements.soundLayers.innerHTML = '';
+        this.updateLayerCount(layers.length);
 
         if (layers.length === 0) {
             this.elements.soundLayers.innerHTML = `
@@ -862,9 +877,9 @@ class UIController {
                     </button>
                 </div>
                 <div class="layer-info">
-                    <div class="layer-name">${layer.name}</div>
+                    <div class="layer-name">${this._escapeHtml(layer.name)}</div>
                     <div class="layer-type ${typeClass}">${typeLabel}</div>
-                    <div class="layer-source">${this._describeLayerSource(layer)}</div>
+                    <div class="layer-source">${this._escapeHtml(this._describeLayerSource(layer))}</div>
                     <div class="layer-track"></div>
                 </div>
                 <div class="layer-volume">
@@ -943,8 +958,6 @@ class UIController {
             this.elements.soundLayers.appendChild(div);
         });
 
-        // Update layer count
-        this.updateLayerCount(layers.length);
     }
 
     _describeLayerSource(layer) {
@@ -1067,8 +1080,8 @@ class UIController {
 
             card.innerHTML = `
                 <button class="oneshot-btn" ${keyHint}>
-                    <i class="fas ${oneShot.icon || 'fa-volume-up'}"></i>
-                    <span>${oneShot.name}</span>
+                    <i class="fas ${this._safeIcon(oneShot.icon)}"></i>
+                    <span>${this._escapeHtml(oneShot.name)}</span>
                 </button>
                 <div class="oneshot-volume">
                     <input type="range" min="0" max="100" value="${Math.round((oneShot.volume ?? 1) * 100)}" title="Volume">
@@ -1147,7 +1160,7 @@ class UIController {
      * Update layer count in status bar
      */
     updateLayerCount(count) {
-        this.elements.layerCount.textContent = `${count} layer${count !== 1 ? 's' : ''} active`;
+        this.elements.layerCount.textContent = `${count} layer${count !== 1 ? 's' : ''}`;
     }
 
     /**

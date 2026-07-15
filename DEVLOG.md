@@ -5,6 +5,22 @@ A soundscape designer application inspired by Syrinscape, for creating ambient s
 
 ---
 
+## Version 0.7.0 - 2026-07-15
+
+### Offline and safety maintenance
+
+- Bundled Font Awesome locally and removed the final runtime internet dependency.
+- Added a real `.gitignore`; local secrets are kept under `secrets/` and excluded from Git.
+- Preserved exact 0% volumes for layers, playlists, intermittent ranges, and one-shots.
+- Made the master Stop control stop currently playing one-shots as well as layers.
+- Prevented playlist edits from deleting stored tracks when no replacement files are selected.
+- Corrected single-track playlists with repeat disabled.
+- Cleared stale playlist crossfade scheduling when Skip is used.
+- Escaped imported and user-entered names before rendering them as HTML.
+- Added dependency-free syntax, offline-asset, and audio regression checks through `npm test`.
+
+---
+
 ## Session 1 - 2026-01-09
 
 ### Goals
