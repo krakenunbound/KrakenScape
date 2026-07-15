@@ -72,14 +72,14 @@ KrakenScape's interface and existing soundscapes work fully offline. All interfa
 To save your configuration or share it with others:
 1. Select the Soundscape you want to export.
 2. Click the **Export** button (file with arrow out) in the Soundscapes header.
-3. A JSON file (e.g., `starship_bridge_soundscape.json`) will be downloaded.
-4. **Note**: This file contains the *configuration* (settings, volume, names), but **not** the audio files themselves. Because KrakenScape is a web app, audio files are stored in your browser's local database.
+3. A portable file (e.g., `starship_bridge.krakenscape.json`) will be downloaded.
+4. The file includes the soundscape configuration and its audio, so it can be backed up or moved to another offline computer.
 
 ### Importing
 1. Click the **Import** button (file with arrow in) in the Soundscapes header.
 2. Select a `.json` soundscape file.
 3. The Soundscape will be added to your list.
-4. **Important**: Since audio files are not in the JSON, you may need to re-link audio files if they aren't already in your browser's storage. However, if you are importing on the same machine, it should link up automatically.
+4. KrakenScape restores the embedded audio into its local browser storage and selects the imported soundscape.
 
 ### Importing From WoW-Ambient
 1. Export one or more zones from WoW-Ambient into a folder.

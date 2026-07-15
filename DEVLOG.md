@@ -5,6 +5,14 @@ A soundscape designer application inspired by Syrinscape, for creating ambient s
 
 ---
 
+## Version 0.7.1 - 2026-07-15
+
+### Portable soundscape files
+
+- Normal soundscape exports now include their locally stored audio.
+- Imports remap soundscape, layer, one-shot, playlist, and mood references to avoid collisions.
+- Added a native Spaceport Lounge bundle plus an automated full import test.
+
 ## Version 0.7.0 - 2026-07-15
 
 ### Offline and safety maintenance
