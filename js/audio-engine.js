@@ -127,7 +127,11 @@ class AudioEngine {
     removeLayer(layerId) {
         const layer = this.layers.get(layerId);
         if (layer) {
-            layer.stop();
+            if (typeof layer.destroy === 'function') {
+                layer.destroy();
+            } else {
+                layer.stop();
+            }
             this.layers.delete(layerId);
         }
     }
@@ -205,6 +209,34 @@ class AudioEngine {
 }
 
 /**
+ * Create a persistent analyser at the output of one layer. Keeping it after
+ * playback stops lets the visualizer decay naturally and avoids rebuilding the
+ * audio graph for every intermittent sound.
+ */
+function createLayerAnalyser(engine) {
+    const context = engine?.audioContext;
+    if (!context || typeof context.createAnalyser !== 'function') return null;
+
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 64;
+    analyser.smoothingTimeConstant = 0.72;
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = -18;
+    analyser.connect(engine.masterGain);
+    return analyser;
+}
+
+function readLayerSpectrum(controller) {
+    if (!controller.analyser) return null;
+    if (!controller.frequencyData ||
+        controller.frequencyData.length !== controller.analyser.frequencyBinCount) {
+        controller.frequencyData = new Uint8Array(controller.analyser.frequencyBinCount);
+    }
+    controller.analyser.getByteFrequencyData(controller.frequencyData);
+    return controller.frequencyData;
+}
+
+/**
  * Controller for a single sound layer
  * Handles both looping and intermittent playback modes
  */
@@ -238,6 +270,8 @@ class LayerController {
         this.nextSource = null;
         this.gainNode = null;
         this.loopGainNode = null;
+        this.analyser = createLayerAnalyser(engine);
+        this.frequencyData = null;
         this.loopVoices = new Set();
         this.loopScheduler = null;
         this.loopNextStartTime = 0;
@@ -304,6 +338,19 @@ class LayerController {
         if (this.gainNode && this.isPlaying) {
             this.gainNode.gain.setTargetAtTime(this.volume, this.engine.audioContext.currentTime, 0.1);
         }
+    }
+
+    getFrequencyData() {
+        return readLayerSpectrum(this);
+    }
+
+    destroy() {
+        this.stop();
+        if (this.analyser) {
+            try { this.analyser.disconnect(); } catch (e) {}
+            this.analyser = null;
+        }
+        this.frequencyData = null;
     }
 
     /**
@@ -409,7 +456,7 @@ class LayerController {
         // individual loop voices crossfade underneath it.
         this.loopGainNode = ctx.createGain();
         this.loopGainNode.gain.value = this.volume;
-        this.loopGainNode.connect(this.engine.masterGain);
+        this.loopGainNode.connect(this.analyser || this.engine.masterGain);
 
         const requestedCrossfade = Math.max(0, Number(this.config.crossfadeDuration) || 0);
         const crossfade = Math.min(requestedCrossfade, duration / 2);
@@ -556,7 +603,7 @@ class LayerController {
 
         // Create nodes
         this.gainNode = ctx.createGain();
-        this.gainNode.connect(this.engine.masterGain);
+        this.gainNode.connect(this.analyser || this.engine.masterGain);
 
         // Fade in
         this.gainNode.gain.setValueAtTime(0, now);
@@ -754,6 +801,8 @@ class PlaylistController {
         this.nextSource = null;
         this.gainNode = null;
         this.nextGainNode = null;
+        this.analyser = createLayerAnalyser(engine);
+        this.frequencyData = null;
         this.progress = 0;
         this.progressInterval = null;
         this.crossfadeTimeout = null;
@@ -823,6 +872,19 @@ class PlaylistController {
         if (this.gainNode && this.isPlaying) {
             this.gainNode.gain.setTargetAtTime(this.volume, this.engine.audioContext.currentTime, 0.1);
         }
+    }
+
+    getFrequencyData() {
+        return readLayerSpectrum(this);
+    }
+
+    destroy() {
+        this.stop();
+        if (this.analyser) {
+            try { this.analyser.disconnect(); } catch (e) {}
+            this.analyser = null;
+        }
+        this.frequencyData = null;
     }
 
     /**
@@ -994,7 +1056,7 @@ class PlaylistController {
         // Create gain node
         this.gainNode = ctx.createGain();
         this.gainNode.gain.value = this.volume;
-        this.gainNode.connect(this.engine.masterGain);
+        this.gainNode.connect(this.analyser || this.engine.masterGain);
 
         // Create and start source
         this.currentSource = ctx.createBufferSource();
@@ -1063,7 +1125,7 @@ class PlaylistController {
         this.gainNode = ctx.createGain();
         this.gainNode.gain.setValueAtTime(0, now);
         this.gainNode.gain.linearRampToValueAtTime(this.volume, now + fadeDuration);
-        this.gainNode.connect(this.engine.masterGain);
+        this.gainNode.connect(this.analyser || this.engine.masterGain);
 
         // Create and start new source
         this.currentSource = ctx.createBufferSource();

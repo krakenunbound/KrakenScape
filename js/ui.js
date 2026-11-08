@@ -370,13 +370,17 @@ class UIController {
      */
     _makeDropZone(element, onDrop) {
         let dragCounter = 0;
+        const isLayerReorder = (e) =>
+            Array.from(e.dataTransfer?.types || []).includes('application/x-krakenscape-layer');
 
         element.addEventListener('dragenter', (e) => {
+            if (isLayerReorder(e)) return;
             dragCounter++;
             element.classList.add('drag-over');
         });
 
         element.addEventListener('dragleave', (e) => {
+            if (isLayerReorder(e)) return;
             dragCounter--;
             if (dragCounter === 0) {
                 element.classList.remove('drag-over');
@@ -384,10 +388,12 @@ class UIController {
         });
 
         element.addEventListener('dragover', (e) => {
+            if (isLayerReorder(e)) return;
             e.dataTransfer.dropEffect = 'copy';
         });
 
         element.addEventListener('drop', (e) => {
+            if (isLayerReorder(e)) return;
             dragCounter = 0;
             element.classList.remove('drag-over');
 
@@ -882,6 +888,9 @@ class UIController {
                     <div class="layer-source">${this._escapeHtml(this._describeLayerSource(layer))}</div>
                     <div class="layer-track"></div>
                 </div>
+                <div class="layer-visualizer" title="Live frequency spectrum">
+                    <canvas aria-hidden="true"></canvas>
+                </div>
                 <div class="layer-volume">
                     <input type="range" min="0" max="100" value="${Math.round(layer.volume * 100)}" title="Volume">
                     <span class="volume-value">${Math.round(layer.volume * 100)}%</span>
@@ -1037,6 +1046,57 @@ class UIController {
 
         if (slider) slider.value = Math.round(volume * 100);
         if (valueEl) valueEl.textContent = Math.round(volume * 100) + '%';
+    }
+
+    /**
+     * Draw live frequency spectra for all visible sound layers.
+     */
+    updateLayerVisualizers(audioEngine) {
+        if (!audioEngine) return;
+
+        this.elements.soundLayers.querySelectorAll('.sound-layer').forEach(layerEl => {
+            const canvas = layerEl.querySelector('.layer-visualizer canvas');
+            if (!canvas) return;
+
+            const layer = audioEngine.getLayer(layerEl.dataset.id);
+            const spectrum = layer?.getFrequencyData?.();
+            const width = Math.max(1, Math.round(canvas.clientWidth));
+            const height = Math.max(1, Math.round(canvas.clientHeight));
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            if (canvas.width !== Math.round(width * dpr) ||
+                canvas.height !== Math.round(height * dpr)) {
+                canvas.width = Math.round(width * dpr);
+                canvas.height = Math.round(height * dpr);
+            }
+
+            const context = canvas.getContext('2d');
+            context.setTransform(dpr, 0, 0, dpr, 0, 0);
+            context.clearRect(0, 0, width, height);
+
+            const barCount = 24;
+            const gap = 2;
+            const barWidth = Math.max(1, (width - gap * (barCount - 1)) / barCount);
+            const playing = Boolean(layer?.isPlaying);
+            const gradient = context.createLinearGradient(0, height, 0, 0);
+            gradient.addColorStop(0, 'rgba(0, 212, 255, 0.28)');
+            gradient.addColorStop(0.55, '#00d4ff');
+            gradient.addColorStop(1, '#52f7d4');
+            context.fillStyle = gradient;
+
+            for (let index = 0; index < barCount; index++) {
+                const spectrumIndex = spectrum
+                    ? Math.min(spectrum.length - 1, Math.floor(index * spectrum.length / barCount))
+                    : 0;
+                const amplitude = spectrum ? spectrum[spectrumIndex] / 255 : 0;
+                const target = playing ? Math.max(0.04, amplitude) : 0.025;
+                const barHeight = Math.max(1, target * height);
+                const x = index * (barWidth + gap);
+                context.globalAlpha = playing ? 0.9 : 0.24;
+                context.fillRect(x, height - barHeight, barWidth, barHeight);
+            }
+            context.globalAlpha = 1;
+        });
     }
 
     /**
@@ -1395,6 +1455,7 @@ class UIController {
         handle.addEventListener('dragstart', (e) => {
             layerEl.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('application/x-krakenscape-layer', layerEl.dataset.id);
             e.dataTransfer.setData('text/plain', layerEl.dataset.id);
         });
 
@@ -1423,7 +1484,9 @@ class UIController {
             e.preventDefault();
             layerEl.classList.remove('drag-over-layer');
 
-            const draggedId = e.dataTransfer.getData('text/plain');
+            const draggedId =
+                e.dataTransfer.getData('application/x-krakenscape-layer') ||
+                e.dataTransfer.getData('text/plain');
             const targetId = layerEl.dataset.id;
 
             if (draggedId && targetId && draggedId !== targetId && this.onLayerReorder) {

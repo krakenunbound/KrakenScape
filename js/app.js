@@ -97,6 +97,7 @@ class KrakenScapeApp {
                 levelMeterEl.classList.add('loud');
             }
 
+            this.ui.updateLayerVisualizers(this.audioEngine);
             requestAnimationFrame(updateMeter);
         };
 
