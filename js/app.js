@@ -3,6 +3,72 @@
  * Ties together the audio engine and UI
  */
 
+/**
+ * In-game variation settings from a WoW-Ambient group's import_defaults.
+ * Returns null when the bundle predates them.
+ */
+function wowRealism(defaults) {
+    const keys = ['pitch_down', 'pitch_up', 'pan_spread', 'first_delay_min', 'first_delay_max', 'track_gap_min', 'track_gap_max'];
+    if (!keys.some(key => key in defaults)) return null;
+    const number = key => Number(defaults[key]) || 0;
+    return {
+        pitchDown: number('pitch_down'),
+        pitchUp: number('pitch_up'),
+        panSpread: number('pan_spread'),
+        firstDelayMin: number('first_delay_min'),
+        firstDelayMax: number('first_delay_max'),
+        trackGapMin: number('track_gap_min'),
+        trackGapMax: number('track_gap_max')
+    };
+}
+
+/**
+ * Layer name for a WoW group. Zones often have several groups with the same
+ * name ("Ambient Details"), so those get their first clip's title added.
+ */
+function wowLayerName(group, nameCounts) {
+    const name = group.name || 'Imported Layer';
+    if ((nameCounts.get(group.name) || 0) < 2) return name;
+    const title = String(group.files?.[0]?.title || '').replace(/[\s_-]*\d+$/, '').trim();
+    return title ? `${name}: ${title}` : name;
+}
+
+/**
+ * Moods for an imported WoW zone: Day, Night, then "Day · <weather>" and
+ * "Night · <weather>" for each weather in the bundle. Intro themes and dawn/dusk
+ * transitions play once in game, so no mood loops them. Bundles without
+ * playback tags get no moods.
+ */
+function buildWowMoods(entries) {
+    if (!entries.some(entry => entry.tags.role)) return [];
+    const weathers = [...new Set(entries.map(entry => entry.tags.weather).filter(Boolean))];
+    const isBase = (tags, time) => !tags.weather && !tags.transition && tags.role !== 'Intro'
+        && (tags.timeOfDay === 'Any' || tags.timeOfDay === time);
+    const makeMood = (name, time, weather) => ({
+        id: 'mood_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        name,
+        layerSettings: entries.map(({ config, tags }) => ({
+            layerId: config.id,
+            volume: config.volume,
+            enabled: isBase(tags, time) || (weather !== null && tags.weather === weather)
+        }))
+    });
+    const moods = [];
+    for (const time of ['Day', 'Night']) {
+        moods.push(makeMood(time, time, null));
+    }
+    for (const weather of weathers) {
+        for (const time of ['Day', 'Night']) {
+            moods.push(makeMood(`${time} · ${weather}`, time, weather));
+        }
+    }
+    return moods;
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = { wowRealism, buildWowMoods, wowLayerName };
+}
+
 class KrakenScapeApp {
     constructor() {
         this.audioEngine = new AudioEngine();
@@ -895,7 +961,9 @@ class KrakenScapeApp {
                 enabled: config.enabled,
                 shuffle: config.playlistShuffle,
                 repeat: config.playlistRepeat,
-                crossfadeDuration: config.playlistCrossfade
+                crossfadeDuration: config.playlistCrossfade,
+                trackGapMin: config.realism?.trackGapMin,
+                trackGapMax: config.realism?.trackGapMax
             });
 
             layer.onTrackChange = (track) => {
@@ -918,7 +986,12 @@ class KrakenScapeApp {
                 fadeOut: config.fadeOut,
                 randomStart: config.randomStart,
                 randomizeDelay: config.randomizeDelay,
-                randomizeVolume: config.randomizeVolume
+                randomizeVolume: config.randomizeVolume,
+                pitchDown: config.realism?.pitchDown,
+                pitchUp: config.realism?.pitchUp,
+                panSpread: config.realism?.panSpread,
+                firstDelayMin: config.realism?.firstDelayMin,
+                firstDelayMax: config.realism?.firstDelayMax
             });
         }
 
@@ -1072,8 +1145,10 @@ class KrakenScapeApp {
      */
     async importWowZoneBundle(bundle, filesByPath) {
         const zone = bundle?.zone || {};
-        const soundscapeName = zone.family_name && zone.family_name !== zone.name
-            ? `${zone.name} (${zone.family_name})`
+        // "Standalone Zones" is WoW-Ambient's folder for zones without a parent, not a place.
+        const family = zone.family_name && zone.family_name !== 'Standalone Zones' ? zone.family_name : '';
+        const soundscapeName = family && family !== zone.name
+            ? `${zone.name} (${family})`
             : (zone.name || 'WoW Ambient Import');
 
         const soundscape = this._createSoundscapeRecord(soundscapeName, {
@@ -1092,6 +1167,11 @@ class KrakenScapeApp {
 
         let importedCount = 0;
         const groups = Array.isArray(bundle.groups) ? bundle.groups : [];
+        const moodTags = [];
+        const nameCounts = new Map();
+        for (const group of groups) {
+            nameCounts.set(group.name, (nameCounts.get(group.name) || 0) + 1);
+        }
 
         for (const group of groups) {
             const files = (group.files || [])
@@ -1103,11 +1183,12 @@ class KrakenScapeApp {
             }
 
             const defaults = group.import_defaults || {};
+            const playback = group.playback || {};
             const requestedType = defaults.type || group.suggested_layer_type || 'loop';
             const usePlaylist = requestedType === 'playlist' || (requestedType === 'loop' && files.length > 1);
             const config = {
                 id: 'layer_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-                name: group.name || 'Imported Layer',
+                name: wowLayerName(group, nameCounts),
                 type: usePlaylist ? 'playlist' : requestedType,
                 volume: defaults.volume ?? (group.category === 'music' ? 0.58 : 0.5),
                 enabled: true,
@@ -1131,6 +1212,7 @@ class KrakenScapeApp {
                 layerTrackNames: !usePlaylist && files.length > 1 ? files.map(file => file.name) : [],
                 file: !usePlaylist && files.length === 1 ? files[0] : null,
                 fileName: !usePlaylist && files.length === 1 ? files[0].name : `${files.length} imported files`,
+                realism: wowRealism(defaults),
                 importSource: {
                     bundleType: bundle.type,
                     zoneId: zone.id || null,
@@ -1140,9 +1222,14 @@ class KrakenScapeApp {
                     groupName: group.name || '',
                     category: group.category || '',
                     sourceLabel: group.source_label || '',
-                    clipCount: files.length
+                    clipCount: files.length,
+                    role: playback.role || '',
+                    timeOfDay: playback.time_of_day || group.time_of_day || 'Any',
+                    weather: playback.weather || '',
+                    transition: playback.transition === true
                 }
             };
+            moodTags.push({ config, tags: config.importSource });
 
             await this.saveLayer(config, {
                 skipHistory: true,
@@ -1165,12 +1252,27 @@ class KrakenScapeApp {
             throw new Error(`No importable audio files were found for "${soundscapeName}".`);
         }
 
+        // Day, Night and one mood per exported weather, so one click switches the
+        // zone the way the game does. Master play follows the Day mood.
+        const moods = buildWowMoods(moodTags);
+        soundscape.moods.push(...moods);
+        const dayMood = moods.find(mood => mood.name === 'Day');
+        if (dayMood) {
+            for (const setting of dayMood.layerSettings) {
+                const config = this.layerConfigs.get(setting.layerId);
+                const stored = soundscape.layers.find(layer => layer.id === setting.layerId);
+                if (config) config.enabled = setting.enabled;
+                if (stored) stored.enabled = setting.enabled;
+            }
+        }
+
         this._saveToStorage();
         this._renderAll();
         return {
             soundscapeId: soundscape.id,
             soundscapeName,
-            importedCount
+            importedCount,
+            moodCount: moods.length
         };
     }
 

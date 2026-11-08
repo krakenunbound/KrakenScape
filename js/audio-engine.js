@@ -259,9 +259,17 @@ class LayerController {
             minVolume: config.minVolume ?? 0.8,
             maxVolume: config.maxVolume ?? 1,
             fadeIn: config.fadeIn ?? 0.5,
-            fadeOut: config.fadeOut ?? 1
+            fadeOut: config.fadeOut ?? 1,
+            // In-game variation (from WoW-Ambient). Pitch in semitones, pan spread 0-1,
+            // first delay in seconds before the first intermittent play.
+            pitchDown: Math.min(0, Number(config.pitchDown) || 0),
+            pitchUp: Math.max(0, Number(config.pitchUp) || 0),
+            panSpread: Math.max(0, Math.min(1, Number(config.panSpread) || 0)),
+            firstDelayMin: Math.max(0, Number(config.firstDelayMin) || 0),
+            firstDelayMax: Math.max(0, Number(config.firstDelayMax) || 0)
         };
 
+        this.isFirstIntermittent = true;
         this.buffer = null;
         this.buffers = [];
         this.volume = Math.max(0, Math.min(1, config.volume ?? 0.7));
@@ -360,6 +368,7 @@ class LayerController {
         if ((!this.buffer && this.buffers.length === 0) || this.isPlaying) return;
 
         this.isPlaying = true;
+        this.isFirstIntermittent = true;
 
         if (this.config.type === 'loop') {
             this._playLoop();
@@ -572,9 +581,14 @@ class LayerController {
         // Calculate random delay
         const minDelay = Math.min(this.config.minDelay, this.config.maxDelay);
         const maxDelay = Math.max(this.config.minDelay, this.config.maxDelay);
-        const delaySeconds = this.config.randomizeDelay
+        let delaySeconds = this.config.randomizeDelay
             ? this._randomBetween(minDelay, maxDelay)
             : minDelay;
+        if (this.isFirstIntermittent && this.config.firstDelayMax > 0) {
+            const firstMin = Math.min(this.config.firstDelayMin, this.config.firstDelayMax);
+            delaySeconds = this._randomBetween(firstMin, this.config.firstDelayMax);
+        }
+        this.isFirstIntermittent = false;
         const delay = delaySeconds * 1000;
 
         this.intermittentTimeout = setTimeout(() => {
@@ -601,30 +615,49 @@ class LayerController {
             : minVolume;
         const finalVolume = this.volume * randomVolume;
 
-        // Create nodes
+        // Pitch varies per play, as the game does. playbackRate also changes length.
+        const rate = this._randomPlaybackRate();
+        const playDuration = buffer.duration / rate;
+
+        // Create nodes: source -> gain -> (panner) -> layer output
+        const output = this.analyser || this.engine.masterGain;
         this.gainNode = ctx.createGain();
-        this.gainNode.connect(this.analyser || this.engine.masterGain);
+        const panner = this._createRandomPanner(ctx);
+        if (panner) {
+            this.gainNode.connect(panner);
+            panner.connect(output);
+        } else {
+            this.gainNode.connect(output);
+        }
 
         // Fade in
+        const fadeIn = Math.min(this.config.fadeIn, playDuration / 2);
+        const fadeOut = Math.min(this.config.fadeOut, playDuration / 2);
         this.gainNode.gain.setValueAtTime(0, now);
-        this.gainNode.gain.linearRampToValueAtTime(finalVolume, now + this.config.fadeIn);
+        this.gainNode.gain.linearRampToValueAtTime(finalVolume, now + fadeIn);
 
         // Fade out
-        const fadeOutStart = Math.max(now, now + buffer.duration - this.config.fadeOut);
+        const fadeOutStart = Math.max(now + fadeIn, now + playDuration - fadeOut);
         this.gainNode.gain.setValueAtTime(finalVolume, fadeOutStart);
-        this.gainNode.gain.linearRampToValueAtTime(0, now + buffer.duration);
+        this.gainNode.gain.linearRampToValueAtTime(0, now + playDuration);
 
         // Create and play source
         this.currentSource = ctx.createBufferSource();
         this.currentSource.buffer = buffer;
+        this.currentSource.playbackRate.value = rate;
         this.currentSource.connect(this.gainNode);
         this.currentSource.start(now);
+        const gainForCleanup = this.gainNode;
 
         // Track progress for this play
-        this._trackIntermittentProgress(buffer);
+        this._trackIntermittentProgress(buffer, playDuration);
 
         // Schedule next play when this one ends
         this.currentSource.onended = () => {
+            try {
+                gainForCleanup.disconnect();
+                if (panner) panner.disconnect();
+            } catch (e) {}
             if (this.progressInterval) {
                 clearInterval(this.progressInterval);
                 this.progressInterval = null;
@@ -642,8 +675,8 @@ class LayerController {
     /**
      * Internal: Track intermittent sound progress
      */
-    _trackIntermittentProgress(buffer) {
-        const duration = buffer.duration;
+    _trackIntermittentProgress(buffer, playDuration = null) {
+        const duration = playDuration || buffer.duration;
         const startTime = this.engine.audioContext.currentTime;
 
         if (this.progressInterval) {
@@ -681,6 +714,26 @@ class LayerController {
      */
     _randomBetween(min, max) {
         return Math.random() * (max - min) + min;
+    }
+
+    /**
+     * Playback rate for one play, from the pitch range in semitones (1 = unchanged).
+     */
+    _randomPlaybackRate() {
+        const { pitchDown, pitchUp } = this.config;
+        if (!pitchDown && !pitchUp) return 1;
+        return Math.pow(2, this._randomBetween(pitchDown, pitchUp) / 12);
+    }
+
+    /**
+     * A stereo panner at a random position within the pan spread, or null for centre.
+     */
+    _createRandomPanner(ctx) {
+        const spread = this.config.panSpread;
+        if (!spread || typeof ctx.createStereoPanner !== 'function') return null;
+        const panner = ctx.createStereoPanner();
+        panner.pan.value = this._randomBetween(-spread, spread);
+        return panner;
     }
 
     /**
@@ -790,8 +843,13 @@ class PlaylistController {
             enabled: config.enabled !== false,
             shuffle: config.shuffle !== false, // Default to shuffle on
             repeat: config.repeat !== false,
-            crossfadeDuration: Math.max(0, config.crossfadeDuration ?? 3)
+            crossfadeDuration: Math.max(0, config.crossfadeDuration ?? 3),
+            // Silence between tracks, in seconds. WoW zone music waits minutes between
+            // tracks. When set, tracks play to the end instead of crossfading.
+            trackGapMin: Math.max(0, Number(config.trackGapMin) || 0),
+            trackGapMax: Math.max(0, Number(config.trackGapMax) || 0)
         };
+        this.gapTimeout = null;
 
         this.tracks = []; // Array of { name, buffer, file }
         this.volume = Math.max(0, Math.min(1, config.volume ?? 0.7));
@@ -937,6 +995,11 @@ class PlaylistController {
             this.crossfadeTimeout = null;
         }
 
+        if (this.gapTimeout) {
+            clearTimeout(this.gapTimeout);
+            this.gapTimeout = null;
+        }
+
         this.progress = 0;
         this.playedIndices = [];
 
@@ -969,6 +1032,11 @@ class PlaylistController {
         if (this.crossfadeTimeout) {
             clearTimeout(this.crossfadeTimeout);
             this.crossfadeTimeout = null;
+        }
+
+        if (this.gapTimeout) {
+            clearTimeout(this.gapTimeout);
+            this.gapTimeout = null;
         }
 
         if (this.progressInterval) {
@@ -1072,6 +1140,27 @@ class PlaylistController {
         // Track progress
         this._trackProgress(track.duration);
 
+        if (this._hasTrackGap()) {
+            // Play to the end, then stay silent for the gap.
+            const source = this.currentSource;
+            source.onended = () => {
+                if (!this.isPlaying || this.currentSource !== source) return;
+                this.progress = 0;
+                if (this.onProgressUpdate) this.onProgressUpdate(0);
+                if (this.progressInterval) {
+                    clearInterval(this.progressInterval);
+                    this.progressInterval = null;
+                }
+                const gapMin = Math.min(this.config.trackGapMin, this.config.trackGapMax);
+                const gapSeconds = Math.random() * (this.config.trackGapMax - gapMin) + gapMin;
+                this.gapTimeout = setTimeout(() => {
+                    this.gapTimeout = null;
+                    this._playNextTrack();
+                }, gapSeconds * 1000);
+            };
+            return;
+        }
+
         // Schedule crossfade to next track before this one ends
         const crossfadeStart = (track.duration - this.config.crossfadeDuration) * 1000;
         if (crossfadeStart > 0) {
@@ -1086,6 +1175,13 @@ class PlaylistController {
                 this._playNextTrack();
             }
         };
+    }
+
+    /**
+     * True when this playlist waits in silence between tracks.
+     */
+    _hasTrackGap() {
+        return this.config.trackGapMax > 0;
     }
 
     /**

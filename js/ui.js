@@ -700,7 +700,9 @@ class UIController {
             playlistCrossfade: parseFloat(this.elements.playlistCrossfade.value),
             playlistShuffle: this.elements.playlistShuffle.checked,
             playlistRepeat: this.elements.playlistRepeat.checked,
-            importSource: this.currentEditingConfig?.importSource || null
+            importSource: this.currentEditingConfig?.importSource || null,
+            // Keep imported in-game variation (pitch, pan, delays) when a layer is edited.
+            realism: this.currentEditingConfig?.realism || null
         };
 
         if (this.isEditingOneShot) {

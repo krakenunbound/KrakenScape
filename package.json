@@ -1,10 +1,10 @@
 {
   "name": "krakenscape",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": true,
   "description": "Local-first ambient soundscape designer",
   "scripts": {
     "check": "node scripts/check-project.js",
-    "test": "npm run check && node scripts/test-audio-engine.js && node scripts/test-portable-import.js"
+    "test": "npm run check && node scripts/test-audio-engine.js && node scripts/test-portable-import.js && node scripts/test-wow-realism.js"
   }
 }

@@ -88,6 +88,13 @@ To save your configuration or share it with others:
 4. Choose a detected zone bundle in the import dialog, or use **Import All**.
 5. KrakenScape will create a new soundscape and turn the grouped WoW audio into playlist and ambient layers automatically.
 
+Zones exported by WoW-Ambient 0.4.4 or later also play the way the game does:
+- **Moods are made for you.** **Day** and **Night** turn on that time of day's layers. Each weather you exported gets a **Day · Weather** and a **Night · Weather** mood, such as *Night · Thunderstorm*. Master play (Space) plays the Day mood.
+- **Detail sounds vary.** Each one-shot plays at a slightly different pitch and from a different place left to right. Some wait a while before their first play after you start.
+- **Music leaves silences.** The zone's music waits between tracks for as long as the game does, often several minutes, instead of crossfading.
+- Intro themes and dawn/dusk transitions play once in the game, so no mood loops them. Turn them on by hand if you want them.
+- Editing a layer keeps these settings.
+
 ## Troubleshooting
 - **Audio not playing?** Click anywhere on the page to ensure the "Audio Context" is resumed (browser security policy).
 - **Missing Audio?** If layers show but don't play after import, edit the layer and re-select the audio file.
